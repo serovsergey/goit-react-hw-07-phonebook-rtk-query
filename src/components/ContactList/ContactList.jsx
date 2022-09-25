@@ -1,25 +1,29 @@
-import { useEffect, useMemo } from 'react';
-import { useDispatch, useSelector } from "react-redux";
 // import PropTypes from 'prop-types'
+import { useMemo, useRef } from 'react';
+import { useSelector } from 'react-redux';
 import s from './ContactList.module.scss'
-import { getContacts } from 'redux/contactsSlice/selector.contacts';
 import { getFilter } from 'redux/filterReducer/selector.filter';
-import { deleteContact, fetchAllContacts } from 'redux/contactsSlice/operations.contacts';
+import { useDeleteContactMutation, useGetContactsQuery } from 'redux/contacts/contacts';
+import { toast } from 'react-toastify';
 
 export const ContactList = () => {
-  const { items, isLoading, error } = useSelector(getContacts);
+  const [deleteContact, { isLoading: isDeleting }] = useDeleteContactMutation();
+  const { data: items = [], isFetching } = useGetContactsQuery();
   const filter = useSelector(getFilter);
-  const dispatch = useDispatch();
+  const deletingId = useRef(null);
 
-  const handleDeleteItem = (id) => {
-    if (!isLoading) {
-      dispatch(deleteContact(id));
+  const handleDeleteItem = async (id) => {
+    if (!isFetching && !isDeleting) {
+      deletingId.current = id;
+      try {
+        await deleteContact(id).unwrap();
+        toast.warning('Contact deleted!')
+        deletingId.current = null;
+      } catch (error) {
+        toast.error(error.data);
+      }
     }
   }
-
-  useEffect(() => {
-    dispatch(fetchAllContacts());
-  }, [dispatch])
 
   const filteredContacts = useMemo(() => {
     const normalizedFilter = filter.toLowerCase();
@@ -30,14 +34,13 @@ export const ContactList = () => {
     <>
       <ul className={s.list}>
         {filteredContacts.map(({ id, name, phone }) => (
-          <li key={id} className={s.item}>
+          <li key={id} className={(isDeleting && deletingId.current === id) ? ` ${s.deleting}` : ''}>
             <span>{name}: {phone}</span>
-            <button onClick={() => handleDeleteItem(id)}>✖</button>
+            <button onClick={() => handleDeleteItem(id)} disabled={isDeleting && deletingId.current === id}>✖</button>
           </li>
         ))}
       </ul>
-      {isLoading && <p>Loading...</p>}
-      {error && <p>{error}</p>}
+      {isFetching && <p>Loading...</p>}
     </>
   )
 }
